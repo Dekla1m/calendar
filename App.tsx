@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { repository } from './src/repository';
@@ -72,8 +72,14 @@ export default function App() {
   const [typeDraft, setTypeDraft] = useState<EventType | null>(null);
   const [newTypeName, setNewTypeName] = useState('');
   const [formError, setFormError] = useState('');
+  const timelineRef = useRef<ScrollView>(null);
   const refresh = useCallback(async () => { setData(await repository.load()); }, []);
   useEffect(() => { refresh().catch(e => setError(String(e))).finally(() => setLoading(false)); }, [refresh]);
+  useEffect(() => {
+    if (tab !== 'calendar' || mode === 'month') return;
+    const frame = requestAnimationFrame(() => timelineRef.current?.scrollTo({ y: HOUR_HEIGHT * 7, animated: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [tab, mode, selected]);
   const mutate = async (action: () => Promise<void>, after?: () => void) => {
     try { setError(''); await action(); await refresh(); after?.(); } catch (e) { setError(String(e)); }
   };
@@ -118,7 +124,7 @@ export default function App() {
   const renderTimeline = (dates: string[]) => {
     const columnWidth = dates.length === 1 ? undefined : 186;
     const contentHeight = 24 * HOUR_HEIGHT;
-    return <ScrollView style={styles.timelineScroll} contentOffset={{ x: 0, y: HOUR_HEIGHT * 7 }} contentContainerStyle={{ minHeight: contentHeight + 46 }}>
+    return <ScrollView ref={timelineRef} style={styles.timelineScroll} contentContainerStyle={{ minHeight: contentHeight + 46 }}>
       <View style={styles.timelineRow}>
         <View style={[styles.timeRail, { height: contentHeight + 46 }]}>
           {Array.from({ length: 24 }, (_, h) => <Text key={h} style={[styles.timeLabel, { top: 38 + h * HOUR_HEIGHT - 8 }]}>{String(h).padStart(2, '0')}:00</Text>)}
