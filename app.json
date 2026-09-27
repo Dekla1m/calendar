@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Мой день",
+    "slug": "calendar",
+    "scheme": "myday",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.dekla1m.calendar",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "name": "Мой день — макет",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "experiments": {
+      "baseUrl": "/calendar"
+    }
+  }
+}
