@@ -294,7 +294,7 @@ const styles = {
     moreDots: { fontSize: 8, color: C.ink, fontWeight: '700' },
     calendarBottomActions: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: C.white, borderTopWidth: 1, borderColor: C.line, paddingHorizontal: 15, paddingVertical: 9 },
     footerAction: { flex: 1, height: 45, marginTop: 0, alignSelf: 'auto', alignItems: 'center', justifyContent: 'center', borderRadius: 13 },
-    footerActionText: { fontSize: 16, fontWeight: '500', letterSpacing: 0.1 },
+    footerActionText: { fontSize: 16, fontWeight: '400', letterSpacing: 0.1 },
     modalBackdrop: { flex: 1, backgroundColor: '#05040bc0', justifyContent: 'flex-end' },
     input: { borderWidth: 1, borderColor: C.line, backgroundColor: C.bg, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, fontSize: 15, color: C.ink, minHeight: 45 },
   }),

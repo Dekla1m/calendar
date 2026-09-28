@@ -13,9 +13,8 @@ export function validLocalDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = parts(value);
   if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return false;
-  return new Date(year, month - 1, day).getFullYear() === year
-    && new Date(year, month - 1, day).getMonth() + 1 === month
-    && new Date(year, month - 1, day).getDate() === day;
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() + 1 === month && parsed.getDate() === day;
 }
 
 export function monthGridDates(monthFirst: string): string[] {
