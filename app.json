@@ -5,7 +5,8 @@
     "scheme": "myday",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#15141c",
     "android": {
       "package": "com.dekla1m.calendar",
       "edgeToEdgeEnabled": true

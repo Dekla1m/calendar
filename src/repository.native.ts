@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { CalendarEvent, Category, EventType, Repository, Snapshot, Task, OTHER, UNCATEGORIZED } from './model';
+import { retentionCutoff } from './retention';
 
 let connection: Promise<SQLite.SQLiteDatabase> | undefined;
 async function db(): Promise<SQLite.SQLiteDatabase> {
@@ -69,4 +70,12 @@ export const repository: Repository = {
   },
   async saveEvent(x: CalendarEvent) { await (await db()).runAsync('INSERT INTO calendar_events (id, title, type_id, date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, type_id=excluded.type_id, date=excluded.date, start_time=excluded.start_time, end_time=excluded.end_time', x.id, x.title, x.typeId, x.date, x.start, x.end); },
   async deleteEvent(id: string) { await (await db()).runAsync('DELETE FROM calendar_events WHERE id=?', id); },
+  async cleanupOldEvents(now: Date) {
+    const cutoff = retentionCutoff(now);
+    const result = await (await db()).runAsync(
+      `DELETE FROM calendar_events WHERE date < ? OR (date = ? AND start_time ${cutoff.includeMinute ? '<=' : '<'} ?)`,
+      cutoff.date, cutoff.date, cutoff.time,
+    );
+    return result.changes;
+  },
 };

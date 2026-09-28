@@ -1,4 +1,5 @@
 import { CalendarEvent, Category, EventType, INITIAL, Repository, Snapshot, Task, OTHER, UNCATEGORIZED, localDate, shiftDate } from './model';
+import { isExpired } from './retention';
 
 // The public preview is deliberately session-only and never reads Android data.
 const today = localDate(new Date());
@@ -36,4 +37,9 @@ export const repository: Repository = {
   },
   async saveEvent(event: CalendarEvent) { data.events = [...data.events.filter(x => x.id !== event.id), event]; },
   async deleteEvent(id: string) { data.events = data.events.filter(x => x.id !== id); },
+  async cleanupOldEvents(now: Date) {
+    const before = data.events.length;
+    data.events = data.events.filter(event => !isExpired(event, now));
+    return before - data.events.length;
+  },
 };

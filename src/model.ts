@@ -23,6 +23,7 @@ export interface Repository {
   deleteType(id: string): Promise<void>;
   saveEvent(event: CalendarEvent): Promise<void>;
   deleteEvent(id: string): Promise<void>;
+  cleanupOldEvents(now: Date): Promise<number>;
 }
 
 export const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
