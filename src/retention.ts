@@ -16,9 +16,9 @@ export function retentionCutoff(now: Date): { date: string; time: string; includ
   };
 }
 
-export function isExpired(event: { date: string; start: string }, now: Date): boolean {
+export function isExpired(event: { date: string; start: string; repeatEnd?: string | null }, now: Date): boolean {
   const cutoff = oneMonthAgo(now);
-  const [year, month, day] = event.date.split('-').map(Number);
+  const [year, month, day] = (event.repeatEnd ?? event.date).split('-').map(Number);
   const [hours, minutes] = event.start.split(':').map(Number);
   return new Date(year, month - 1, day, hours, minutes).getTime() < cutoff.getTime();
 }

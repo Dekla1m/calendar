@@ -12,10 +12,10 @@ let data: Snapshot = {
   ],
   types: [...INITIAL.types, { id: 'demo-meeting', name: 'Встреча', color: '#5576d6', system: false }, { id: 'demo-personal-type', name: 'Личное', color: '#3c9d8b', system: false }],
   events: [
-    { id: 'demo-event-1', title: 'Планирование недели', typeId: 'demo-meeting', date: today, start: '09:30', end: '10:45' },
-    { id: 'demo-event-2', title: 'Прогулка', typeId: 'demo-personal-type', date: today, start: '13:15', end: '14:00' },
-    { id: 'demo-event-3', title: 'Созвон по проекту', typeId: 'demo-meeting', date: today, start: '10:00', end: '11:00' },
-    { id: 'demo-event-4', title: 'Кофе с другом', typeId: 'demo-personal-type', date: shiftDate(today, 1), start: '16:30', end: '17:30' },
+    { id: 'demo-event-1', title: 'Планирование недели', typeId: 'demo-meeting', date: today, start: '09:30', end: '10:45', repeat: 'once', repeatEnd: null },
+    { id: 'demo-event-2', title: 'Прогулка', typeId: 'demo-personal-type', date: today, start: '13:15', end: '14:00', repeat: 'once', repeatEnd: null },
+    { id: 'demo-event-3', title: 'Созвон по проекту', typeId: 'demo-meeting', date: today, start: '11:00', end: '12:00', repeat: 'once', repeatEnd: null },
+    { id: 'demo-event-4', title: 'Кофе с другом', typeId: 'demo-personal-type', date: shiftDate(today, 1), start: '16:30', end: '17:30', repeat: 'once', repeatEnd: null },
   ],
 };
 const clone = (): Snapshot => JSON.parse(JSON.stringify(data));

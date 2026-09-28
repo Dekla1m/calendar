@@ -1,49 +1,34 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { repository } from './src/repository';
-import { CalendarEvent, Category, EventType, INITIAL, OTHER, Snapshot, Task, TYPE_COLORS, UNCATEGORIZED, localDate, mondayOf, parseDate, shiftDate, shiftMonth, timeMinutes, uid, validTime } from './src/model';
+import { CalendarEvent, Category, EventType, INITIAL, OTHER, Repeat, Snapshot, Task, TYPE_COLORS, UNCATEGORIZED, localDate, mondayOf, parseDate, shiftDate, shiftMonth, timeMinutes, uid, validTime } from './src/model';
 import { isExpired } from './src/retention';
+import { firstConflictDate, monthGridDates, occursOn, validLocalDate } from './src/recurrence';
 
 type Tab = 'tasks' | 'calendar';
 type Mode = 'day' | 'three' | 'week' | 'month';
 type Dialog = 'task' | 'category' | 'event' | 'types' | 'type' | null;
-type Placement = { event: CalendarEvent; lane: number; lanes: number };
 const C = { ink: '#f2eff8', muted: '#aaa5b8', blue: '#b9a2ff', button: '#7050ae', purple: '#b58aff', pale: '#382f51', line: '#3a3546', bg: '#15141c', white: '#24212e', red: '#ff8598', orange: '#a45124', grid: '#302c39', alt: '#292832' };
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const MONTH_TITLES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const HOUR_HEIGHT = 72;
+const REPEAT_OPTIONS: { value: Repeat; label: string }[] = [
+  { value: 'once', label: 'Единоразово' },
+  { value: 'daily', label: 'Каждый день' },
+  { value: 'weekly', label: 'Каждую неделю' },
+  { value: 'monthly', label: 'Каждый месяц' },
+];
 
 function dateTitle(value: string): string { const d = parseDate(value); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 function monthTitle(value: string): string { const d = parseDate(value); return `${MONTH_TITLES[d.getMonth()]} ${d.getFullYear()}`; }
 function dayName(value: string): string { return WEEKDAYS[(parseDate(value).getDay() + 6) % 7]; }
 function shade(hex: string): string { return `${hex}38`; }
 
-function placements(events: CalendarEvent[]): Placement[] {
-  const sorted = [...events].sort((a, b) => timeMinutes(a.start) - timeMinutes(b.start) || timeMinutes(a.end) - timeMinutes(b.end));
-  const result: Placement[] = [];
-  let group: Placement[] = [];
-  let groupEnd = -1;
-  const flush = () => { const lanes = Math.max(1, ...group.map(x => x.lane + 1)); group.forEach(x => { x.lanes = lanes; }); group = []; };
-  for (const event of sorted) {
-    const start = timeMinutes(event.start);
-    if (group.length && start >= groupEnd) flush();
-    const occupied = new Set(group.filter(x => timeMinutes(x.event.end) > start).map(x => x.lane));
-    let lane = 0;
-    while (occupied.has(lane)) lane++;
-    const placed = { event, lane, lanes: 1 };
-    group.push(placed);
-    result.push(placed);
-    groupEnd = Math.max(groupEnd, timeMinutes(event.end));
-  }
-  if (group.length) flush();
-  return result;
-}
-
-function Action({ label, onPress, kind = 'plain', disabled = false, containerStyle }: { label: string; onPress: () => void; kind?: 'plain' | 'primary' | 'orange' | 'danger'; disabled?: boolean; containerStyle?: ViewStyle }) {
+function Action({ label, onPress, kind = 'plain', disabled = false, containerStyle, textStyle }: { label: string; onPress: () => void; kind?: 'plain' | 'primary' | 'orange' | 'danger'; disabled?: boolean; containerStyle?: ViewStyle; textStyle?: TextStyle }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={[styles.action, kind === 'primary' && styles.actionPrimary, kind === 'orange' && styles.actionOrange, kind === 'danger' && styles.actionDanger, containerStyle, disabled && { opacity: 0.45 }]}>
-    <Text style={[styles.actionText, (kind === 'primary' || kind === 'orange') && { color: '#fff' }, kind === 'danger' && { color: C.red }]}>{label}</Text>
+    <Text style={[styles.actionText, (kind === 'primary' || kind === 'orange') && { color: '#fff' }, kind === 'danger' && { color: C.red }, textStyle]}>{label}</Text>
   </Pressable>;
 }
 
@@ -104,10 +89,10 @@ export default function App() {
   };
   const openTask = (task?: Task, categoryId = UNCATEGORIZED) => { setFormError(''); setTaskDraft(task ?? { id: uid(), categoryId, title: '', completed: false, createdAt: Date.now() }); setDialog('task'); };
   const openCategory = (category?: Category) => { setFormError(''); setCategoryDraft(category ?? { id: uid(), name: '', system: false }); setDialog('category'); };
-  const openEvent = (event?: CalendarEvent, date = mode === 'three' ? today : selected) => { setFormError(''); setNewTypeName(''); setEventDraft(event ?? { id: uid(), title: '', typeId: OTHER, date, start: '09:00', end: '10:00' }); setDialog('event'); };
+  const openEvent = (event?: CalendarEvent, date = mode === 'three' ? today : selected) => { setFormError(''); setNewTypeName(''); setEventDraft(event ?? { id: uid(), title: '', typeId: OTHER, date, start: '09:00', end: '10:00', repeat: 'once', repeatEnd: null }); setDialog('event'); };
   const openType = (type?: EventType) => { setFormError(''); setTypeDraft(type ?? { id: uid(), name: '', color: TYPE_COLORS[data.types.length % TYPE_COLORS.length], system: false }); setDialog('type'); };
   const typeColor = (id: string) => data.types.find(x => x.id === id)?.color ?? '#89919d';
-  const eventsOn = (date: string) => data.events.filter(x => x.date === date).sort((a, b) => a.start.localeCompare(b.start));
+  const eventsOn = (date: string) => data.events.filter(x => occursOn(x, date)).sort((a, b) => a.start.localeCompare(b.start));
   const move = (direction: number) => setSelected(current => mode === 'month' ? shiftMonth(current, direction) : shiftDate(current, direction * (mode === 'week' ? 7 : 1)));
   const cleanNow = async () => {
     try {
@@ -137,8 +122,11 @@ export default function App() {
     if (!eventDraft) return;
     const title = eventDraft.title.trim();
     if (!title) { setFormError('Введите название записи'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDraft.date) || localDate(parseDate(eventDraft.date)) !== eventDraft.date) { setFormError('Дата должна быть в формате ГГГГ-ММ-ДД'); return; }
+    if (!validLocalDate(eventDraft.date)) { setFormError('Дата должна быть в формате ГГГГ-ММ-ДД'); return; }
+    if (eventDraft.repeat !== 'once' && (!eventDraft.repeatEnd || !validLocalDate(eventDraft.repeatEnd) || eventDraft.repeatEnd < eventDraft.date)) { setFormError('Укажите дату окончания не раньше начальной'); return; }
     if (!validTime(eventDraft.start) || !validTime(eventDraft.end) || timeMinutes(eventDraft.end) <= timeMinutes(eventDraft.start)) { setFormError('Укажите время в формате 09:30; конец должен быть позже начала'); return; }
+    const conflict = data.events.map(event => ({ event, date: firstConflictDate(eventDraft, event) })).find(x => x.date);
+    if (conflict) { setFormError(`В ${conflict.date} это время занято: «${conflict.event.title}»`); return; }
     const wantedType = newTypeName.trim();
     const existingType = data.types.find(x => x.name.toLowerCase() === wantedType.toLowerCase());
     const addedType: EventType | null = wantedType && !existingType ? { id: uid(), name: wantedType, color: TYPE_COLORS[data.types.length % TYPE_COLORS.length], system: false } : null;
@@ -159,16 +147,14 @@ export default function App() {
         </View>
         <View style={styles.timelineColumns}>
           {dates.map((date, index) => {
-            const placed = placements(eventsOn(date));
+            const dayEvents = eventsOn(date);
             return <View key={date} style={[styles.dayColumn, threeDays && { backgroundColor: index % 2 ? C.alt : C.bg }, { height: contentHeight }]}>
               {Array.from({ length: 49 }, (_, i) => <View key={i} style={[styles.gridLine, { top: i * HOUR_HEIGHT / 2, borderTopColor: i % 2 ? C.grid : C.line }]} />)}
-              {placed.map(({ event, lane, lanes }) => {
+              {dayEvents.map(event => {
                 const top = timeMinutes(event.start) / 60 * HOUR_HEIGHT;
                 const height = Math.max(26, (timeMinutes(event.end) - timeMinutes(event.start)) / 60 * HOUR_HEIGHT - 2);
-                const width = `${100 / lanes}%` as const;
-                const left = `${100 * lane / lanes}%` as const;
                 const color = typeColor(event.typeId);
-                return <Pressable key={event.id} accessibilityRole="button" accessibilityLabel={`${event.title}, ${event.start}–${event.end}`} onPress={() => openEvent(event)} style={[styles.eventBlock, { top, height, left, width, backgroundColor: shade(color), borderLeftColor: color }]}>
+                return <Pressable key={event.id} accessibilityRole="button" accessibilityLabel={`${event.title}, ${event.start}–${event.end}`} onPress={() => openEvent(event)} style={[styles.eventBlock, { top, height, left: 0, right: 0, backgroundColor: shade(color), borderLeftColor: color }]}>
                   <Text numberOfLines={height < 48 ? 1 : 2} style={styles.eventTitle}>{event.title}</Text>
                   {height >= 45 && <Text style={styles.eventTime}>{event.start}–{event.end}</Text>}
                 </Pressable>;
@@ -183,8 +169,7 @@ export default function App() {
   const weekStart = mondayOf(selected);
   const weekDates = Array.from({ length: 7 }, (_, i) => shiftDate(weekStart, i));
   const monthFirst = `${selected.slice(0, 7)}-01`;
-  const monthGridStart = mondayOf(monthFirst);
-  const monthDates = Array.from({ length: 42 }, (_, i) => shiftDate(monthGridStart, i));
+  const monthDates = monthGridDates(monthFirst);
   const selectedEvents = eventsOn(selected);
   const expiredCount = data.events.filter(event => isExpired(event, new Date())).length;
 
@@ -218,7 +203,7 @@ export default function App() {
       <Pressable onPress={() => openTask()} accessibilityRole="button" accessibilityLabel="Добавить задачу" style={styles.fab}><Text style={styles.fabText}>+</Text></Pressable>
     </> : <>
       <View style={styles.calendarControls}>
-        {mode !== 'three' && <View style={styles.dateNavigator}><Pressable onPress={() => move(-1)} style={styles.navArrow}><Text style={styles.navArrowText}>‹</Text></Pressable><Text style={styles.dateHeading}>{mode === 'month' ? monthTitle(selected) : dateTitle(selected)}</Text><Pressable onPress={() => move(1)} style={styles.navArrow}><Text style={styles.navArrowText}>›</Text></Pressable></View>}
+        {mode !== 'three' && <View style={styles.dateNavigator}><Pressable accessibilityLabel="Предыдущая дата" onPress={() => move(-1)} style={styles.navArrow}><Text style={styles.navArrowText}>←</Text></Pressable><Text style={styles.dateHeading}>{mode === 'month' ? monthTitle(selected) : dateTitle(selected)}</Text><Pressable accessibilityLabel="Следующая дата" onPress={() => move(1)} style={styles.navArrow}><Text style={styles.navArrowText}>→</Text></Pressable></View>}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeRow}>{([['day', 'День'], ['three', '3 дня'], ['week', 'Неделя'], ['month', 'Месяц']] as const).map(([value, label]) => <Chip key={value} label={label} selected={mode === value} onPress={() => setMode(value)} />)}</ScrollView>
       </View>
       {mode === 'day' && renderTimeline([selected])}
@@ -229,7 +214,7 @@ export default function App() {
         <View style={styles.agendaHeader}><Text style={styles.sectionHeading}>{dateTitle(selected)}</Text><Action label="+ Запись" onPress={() => openEvent()} /></View>
         {selectedEvents.length ? selectedEvents.map(event => <Pressable key={event.id} style={styles.agendaItem} onPress={() => openEvent(event)}><View style={[styles.agendaBar, { backgroundColor: typeColor(event.typeId) }]} /><Text style={styles.agendaTime}>{event.start}</Text><View style={{ flex: 1 }}><Text style={styles.agendaTitle}>{event.title}</Text><Text style={styles.caption}>{event.start}–{event.end} · {data.types.find(x => x.id === event.typeId)?.name}</Text></View><Text style={styles.editGlyph}>›</Text></Pressable>) : <Text style={styles.emptySmall}>На этот день записей нет</Text>}
       </ScrollView>}
-      <View style={styles.calendarBottomActions}><Action label="Типы записей" kind="orange" containerStyle={styles.footerAction} onPress={() => { setCleanupMessage(''); setDialog('types'); }} /><Action label="+ Запись" kind="primary" containerStyle={styles.footerAction} onPress={() => openEvent()} /></View>
+      <View style={styles.calendarBottomActions}><Action label="Типы записей" kind="orange" containerStyle={styles.footerAction} textStyle={styles.footerActionText} onPress={() => { setCleanupMessage(''); setDialog('types'); }} /><Action label="+ Запись" kind="primary" containerStyle={styles.footerAction} textStyle={styles.footerActionText} onPress={() => openEvent()} /></View>
     </>}
     <View style={styles.tabBar}><Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'tasks' }} onPress={() => setTab('tasks')} style={[styles.tab, tab === 'tasks' && styles.activeTab]}><Text style={[styles.tabIcon, tab === 'tasks' && styles.activeTabText]}>☑</Text><Text style={[styles.tabText, tab === 'tasks' && styles.activeTabText]}>Задачи</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'calendar' }} onPress={() => setTab('calendar')} style={[styles.tab, tab === 'calendar' && styles.activeTab]}><Text style={[styles.tabIcon, tab === 'calendar' && styles.activeTabText]}>▦</Text><Text style={[styles.tabText, tab === 'calendar' && styles.activeTabText]}>Календарь</Text></Pressable></View>
 
@@ -237,7 +222,21 @@ export default function App() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
         {dialog === 'task' && taskDraft && <><Text style={styles.fieldLabel}>Название</Text><TextInput value={taskDraft.title} onChangeText={title => setTaskDraft({ ...taskDraft, title })} placeholder="Что нужно сделать?" style={styles.input} autoFocus /><Text style={styles.fieldLabel}>Категория</Text><View style={styles.wrap}>{data.categories.map(x => <Chip key={x.id} label={x.name} selected={taskDraft.categoryId === x.id} onPress={() => setTaskDraft({ ...taskDraft, categoryId: x.id })} />)}</View><Action label="Сохранить задачу" kind="primary" onPress={saveTask} />{data.tasks.some(x => x.id === taskDraft.id) && <Action label="Удалить задачу" kind="danger" onPress={() => mutate(() => repository.deleteTask(taskDraft.id), () => setDialog(null))} />}</>}
         {dialog === 'category' && categoryDraft && <><Text style={styles.fieldLabel}>Название категории</Text><TextInput value={categoryDraft.name} onChangeText={name => setCategoryDraft({ ...categoryDraft, name })} placeholder="Например, Учёба" style={styles.input} autoFocus /><Action label="Сохранить категорию" kind="primary" onPress={saveCategory} />{data.categories.some(x => x.id === categoryDraft.id) && <><Text style={styles.helpText}>При удалении задачи перейдут в «Без категории».</Text><Action label="Удалить категорию" kind="danger" onPress={() => mutate(() => repository.deleteCategory(categoryDraft.id), () => setDialog(null))} /></>}</>}
-        {dialog === 'event' && eventDraft && <><Text style={styles.fieldLabel}>Название</Text><TextInput value={eventDraft.title} onChangeText={title => setEventDraft({ ...eventDraft, title })} placeholder="Что запланировано?" style={styles.input} autoFocus /><Text style={styles.fieldLabel}>Тип записи</Text><View style={styles.wrap}>{data.types.map(x => <Chip key={x.id} label={x.name} color={x.color} selected={eventDraft.typeId === x.id && !newTypeName} onPress={() => { setNewTypeName(''); setEventDraft({ ...eventDraft, typeId: x.id }); }} />)}</View><TextInput value={newTypeName} onChangeText={setNewTypeName} placeholder="Или новый тип" style={styles.input} /><Text style={styles.fieldLabel}>Дата (ГГГГ-ММ-ДД)</Text><TextInput value={eventDraft.date} onChangeText={date => setEventDraft({ ...eventDraft, date })} placeholder="2026-09-28" style={styles.input} keyboardType="numbers-and-punctuation" /><View style={styles.timeFields}><View style={{ flex: 1 }}><Text style={styles.fieldLabel}>Начало</Text><TextInput value={eventDraft.start} onChangeText={start => setEventDraft({ ...eventDraft, start })} placeholder="09:00" style={styles.input} keyboardType="numbers-and-punctuation" /></View><View style={{ flex: 1 }}><Text style={styles.fieldLabel}>Окончание</Text><TextInput value={eventDraft.end} onChangeText={end => setEventDraft({ ...eventDraft, end })} placeholder="10:00" style={styles.input} keyboardType="numbers-and-punctuation" /></View></View><Action label="Сохранить запись" kind="primary" onPress={saveEvent} />{data.events.some(x => x.id === eventDraft.id) && <Action label="Удалить запись" kind="danger" onPress={() => mutate(() => repository.deleteEvent(eventDraft.id), () => setDialog(null))} />}</>}
+        {dialog === 'event' && eventDraft && <>
+          <Text style={styles.fieldLabel}>Название</Text>
+          <TextInput value={eventDraft.title} onChangeText={title => setEventDraft({ ...eventDraft, title })} placeholder="Что запланировано?" placeholderTextColor={C.muted} style={styles.input} autoFocus />
+          <Text style={styles.fieldLabel}>Тип записи</Text>
+          <View style={styles.wrap}>{data.types.map(x => <Chip key={x.id} label={x.name} color={x.color} selected={eventDraft.typeId === x.id && !newTypeName} onPress={() => { setNewTypeName(''); setEventDraft({ ...eventDraft, typeId: x.id }); }} />)}</View>
+          <TextInput value={newTypeName} onChangeText={setNewTypeName} placeholder="Или новый тип" placeholderTextColor={C.muted} style={styles.input} />
+          <Text style={styles.fieldLabel}>Периодичность</Text>
+          <View style={styles.wrap}>{REPEAT_OPTIONS.map(option => <Chip key={option.value} label={option.label} selected={eventDraft.repeat === option.value} onPress={() => setEventDraft({ ...eventDraft, repeat: option.value, date: eventDraft.repeat === 'once' && option.value !== 'once' ? today : eventDraft.date, repeatEnd: option.value === 'once' ? null : eventDraft.repeatEnd })} />)}</View>
+          <Text style={styles.fieldLabel}>{eventDraft.repeat === 'once' ? 'Дата (ГГГГ-ММ-ДД)' : 'Начальная дата периода (ГГГГ-ММ-ДД)'}</Text>
+          <TextInput value={eventDraft.date} onChangeText={date => setEventDraft({ ...eventDraft, date })} placeholder="2026-09-28" placeholderTextColor={C.muted} style={styles.input} keyboardType="numbers-and-punctuation" />
+          {eventDraft.repeat !== 'once' && <><Text style={styles.fieldLabel}>Конечная дата периода (ГГГГ-ММ-ДД)</Text><TextInput value={eventDraft.repeatEnd ?? ''} onChangeText={repeatEnd => setEventDraft({ ...eventDraft, repeatEnd })} placeholder="Введите дату вручную" placeholderTextColor={C.muted} style={styles.input} keyboardType="numbers-and-punctuation" /><Text style={styles.helpText}>При редактировании изменяется вся серия. Ежемесячный повтор в коротком месяце переносится на его последний день.</Text></>}
+          <View style={styles.timeFields}><View style={{ flex: 1 }}><Text style={styles.fieldLabel}>Начало</Text><TextInput value={eventDraft.start} onChangeText={start => setEventDraft({ ...eventDraft, start })} placeholder="09:00" placeholderTextColor={C.muted} style={styles.input} keyboardType="numbers-and-punctuation" /></View><View style={{ flex: 1 }}><Text style={styles.fieldLabel}>Окончание</Text><TextInput value={eventDraft.end} onChangeText={end => setEventDraft({ ...eventDraft, end })} placeholder="10:00" placeholderTextColor={C.muted} style={styles.input} keyboardType="numbers-and-punctuation" /></View></View>
+          <Action label="Сохранить запись" kind="primary" onPress={saveEvent} />
+          {data.events.some(x => x.id === eventDraft.id) && <Action label={eventDraft.repeat === 'once' ? 'Удалить запись' : 'Удалить всю серию'} kind="danger" onPress={() => mutate(() => repository.deleteEvent(eventDraft.id), () => setDialog(null))} />}
+        </>}
         {dialog === 'types' && <><Text style={styles.helpText}>Цвет помогает различать записи. «Другое» всегда остаётся доступным.</Text>{data.types.map(type => <View key={type.id} style={styles.typeRow}><View style={[styles.typeColor, { backgroundColor: type.color }]} /><Text style={[styles.taskText, { flex: 1 }]}>{type.name}</Text>{!type.system && <Action label="Изменить" onPress={() => openType(type)} />}</View>)}<Action label="+ Новый тип" kind="primary" onPress={() => openType()} /><Text style={styles.fieldLabel}>Очистка календаря</Text><Text style={styles.helpText}>Записи, начавшиеся более месяца назад, удаляются автоматически при открытии приложения, возвращении к нему и каждый час. Задачи не затрагиваются.</Text><Action label={`Очистить старые записи${expiredCount ? ` · ${expiredCount}` : ''}`} kind="danger" onPress={() => { void cleanNow(); }} />{!!cleanupMessage && <Text style={styles.helpText}>{cleanupMessage}</Text>}</>}
         {dialog === 'type' && typeDraft && <><Text style={styles.fieldLabel}>Название типа</Text><TextInput value={typeDraft.name} onChangeText={name => setTypeDraft({ ...typeDraft, name })} style={styles.input} placeholder="Например, Спорт" autoFocus /><Text style={styles.fieldLabel}>Цвет</Text><View style={styles.wrap}>{TYPE_COLORS.map(color => <Pressable key={color} accessibilityLabel={`Цвет ${color}`} onPress={() => setTypeDraft({ ...typeDraft, color })} style={[styles.colorChoice, { backgroundColor: color }, typeDraft.color === color && styles.colorSelected]} />)}</View><Action label="Сохранить тип" kind="primary" onPress={saveType} />{data.types.some(x => x.id === typeDraft.id) && !typeDraft.system && <><Text style={styles.helpText}>При удалении записи перейдут в «Другое».</Text><Action label="Удалить тип" kind="danger" onPress={() => mutate(() => repository.deleteType(typeDraft.id), () => setDialog('types'))} /></>}</>}
         {!!formError && <Text style={styles.error}>{formError}</Text>}
@@ -271,6 +270,7 @@ const styles = {
     taskDone: { textDecorationLine: 'line-through', color: '#898494' },
     fab: { position: 'absolute', right: 22, bottom: 83, width: 55, height: 55, borderRadius: 20, backgroundColor: C.button, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10 },
     chipSelected: { backgroundColor: C.pale, borderColor: C.purple },
+    navArrowText: { fontSize: 21, lineHeight: 26, color: C.blue, textAlign: 'center', includeFontPadding: false },
     timelineScroll: { flex: 1, backgroundColor: C.bg },
     timelineColumns: { flex: 1, flexDirection: 'row' },
     timeRail: { width: 56, backgroundColor: C.bg },
@@ -294,6 +294,7 @@ const styles = {
     moreDots: { fontSize: 8, color: C.ink, fontWeight: '700' },
     calendarBottomActions: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: C.white, borderTopWidth: 1, borderColor: C.line, paddingHorizontal: 15, paddingVertical: 9 },
     footerAction: { flex: 1, height: 45, marginTop: 0, alignSelf: 'auto', alignItems: 'center', justifyContent: 'center', borderRadius: 13 },
+    footerActionText: { fontSize: 16, fontWeight: '500', letterSpacing: 0.1 },
     modalBackdrop: { flex: 1, backgroundColor: '#05040bc0', justifyContent: 'flex-end' },
     input: { borderWidth: 1, borderColor: C.line, backgroundColor: C.bg, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, fontSize: 15, color: C.ink, minHeight: 45 },
   }),

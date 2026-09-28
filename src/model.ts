@@ -1,7 +1,8 @@
 export type Category = { id: string; name: string; system: boolean };
 export type Task = { id: string; categoryId: string; title: string; completed: boolean; createdAt: number };
 export type EventType = { id: string; name: string; color: string; system: boolean };
-export type CalendarEvent = { id: string; title: string; typeId: string; date: string; start: string; end: string };
+export type Repeat = 'once' | 'daily' | 'weekly' | 'monthly';
+export type CalendarEvent = { id: string; title: string; typeId: string; date: string; start: string; end: string; repeat: Repeat; repeatEnd: string | null };
 export type Snapshot = { categories: Category[]; tasks: Task[]; types: EventType[]; events: CalendarEvent[] };
 
 export const UNCATEGORIZED = 'uncategorized';
@@ -27,7 +28,7 @@ export interface Repository {
 }
 
 export const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-export const TYPE_COLORS = ['#5576d6', '#d18354', '#8c6bc3', '#3c9d8b', '#c45d80', '#8c904b'];
+export const TYPE_COLORS = ['#5576d6', '#d18354', '#8c6bc3', '#3c9d8b', '#c45d80', '#8c904b', '#da675f', '#47a1bc', '#a875b7', '#8eaf55', '#d49b48', '#6e83ad'];
 
 export function localDate(date: Date): string {
   const y = date.getFullYear();

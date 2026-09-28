@@ -27,13 +27,18 @@ async function initialize(): Promise<SQLite.SQLiteDatabase> {
       await tx.execAsync('PRAGMA user_version = 1');
     });
   }
+  if (version < 2) {
+    await database.withExclusiveTransactionAsync(async tx => {
+      await tx.execAsync("ALTER TABLE calendar_events ADD COLUMN repeat TEXT NOT NULL DEFAULT 'once'; ALTER TABLE calendar_events ADD COLUMN repeat_end TEXT; PRAGMA user_version = 2;");
+    });
+  }
   return database;
 }
 
 type CategoryRow = { id: string; name: string; system: number };
 type TaskRow = { id: string; category_id: string; title: string; completed: number; created_at: number };
 type TypeRow = { id: string; name: string; color: string; system: number };
-type EventRow = { id: string; title: string; type_id: string; date: string; start_time: string; end_time: string };
+type EventRow = { id: string; title: string; type_id: string; date: string; start_time: string; end_time: string; repeat: CalendarEvent['repeat']; repeat_end: string | null };
 export const repository: Repository = {
   async load(): Promise<Snapshot> {
     const database = await db();
@@ -47,7 +52,7 @@ export const repository: Repository = {
       categories: categories.map(x => ({ id: x.id, name: x.name, system: !!x.system })),
       tasks: tasks.map(x => ({ id: x.id, categoryId: x.category_id, title: x.title, completed: !!x.completed, createdAt: x.created_at })),
       types: types.map(x => ({ id: x.id, name: x.name, color: x.color, system: !!x.system })),
-      events: events.map(x => ({ id: x.id, title: x.title, typeId: x.type_id, date: x.date, start: x.start_time, end: x.end_time })),
+      events: events.map(x => ({ id: x.id, title: x.title, typeId: x.type_id, date: x.date, start: x.start_time, end: x.end_time, repeat: x.repeat || 'once', repeatEnd: x.repeat_end })),
     };
   },
   async saveCategory(x: Category) { await (await db()).runAsync('INSERT INTO categories (id, name, system) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name', x.id, x.name, Number(x.system)); },
@@ -68,12 +73,12 @@ export const repository: Repository = {
       await tx.runAsync('DELETE FROM event_types WHERE id=? AND system=0', id);
     });
   },
-  async saveEvent(x: CalendarEvent) { await (await db()).runAsync('INSERT INTO calendar_events (id, title, type_id, date, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, type_id=excluded.type_id, date=excluded.date, start_time=excluded.start_time, end_time=excluded.end_time', x.id, x.title, x.typeId, x.date, x.start, x.end); },
+  async saveEvent(x: CalendarEvent) { await (await db()).runAsync('INSERT INTO calendar_events (id, title, type_id, date, start_time, end_time, repeat, repeat_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, type_id=excluded.type_id, date=excluded.date, start_time=excluded.start_time, end_time=excluded.end_time, repeat=excluded.repeat, repeat_end=excluded.repeat_end', x.id, x.title, x.typeId, x.date, x.start, x.end, x.repeat, x.repeatEnd); },
   async deleteEvent(id: string) { await (await db()).runAsync('DELETE FROM calendar_events WHERE id=?', id); },
   async cleanupOldEvents(now: Date) {
     const cutoff = retentionCutoff(now);
     const result = await (await db()).runAsync(
-      `DELETE FROM calendar_events WHERE date < ? OR (date = ? AND start_time ${cutoff.includeMinute ? '<=' : '<'} ?)`,
+      `DELETE FROM calendar_events WHERE COALESCE(repeat_end, date) < ? OR (COALESCE(repeat_end, date) = ? AND start_time ${cutoff.includeMinute ? '<=' : '<'} ?)`,
       cutoff.date, cutoff.date, cutoff.time,
     );
     return result.changes;
