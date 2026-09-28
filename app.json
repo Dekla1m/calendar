@@ -3,16 +3,28 @@
     "name": "Мой день",
     "slug": "calendar",
     "scheme": "myday",
-    "version": "0.1.0",
+    "version": "0.1.1",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#15141c",
+    "androidStatusBar": {
+      "translucent": false,
+      "backgroundColor": "#15141c"
+    },
     "android": {
       "package": "com.dekla1m.calendar",
-      "edgeToEdgeEnabled": true
+      "versionCode": 2,
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#15141c"
+      }
     },
     "web": {
       "name": "Мой день — макет",
+      "favicon": "./assets/icon.png",
       "bundler": "metro",
       "output": "single"
     },

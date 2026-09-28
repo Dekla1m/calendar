@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, AppState, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, TextStyle, View, ViewStyle } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { repository } from './src/repository';
 import { CalendarEvent, Category, EventType, INITIAL, OTHER, Repeat, Snapshot, Task, TYPE_COLORS, UNCATEGORIZED, localDate, mondayOf, parseDate, shiftDate, shiftMonth, timeMinutes, uid, validTime } from './src/model';
@@ -181,7 +181,7 @@ export default function App() {
     </View>
     {Platform.OS === 'web' && <Text style={styles.demoBanner}>Веб-макет · вымышленные данные · изменения только до обновления страницы</Text>}
     {!!error && <Text style={styles.error}>{error}</Text>}
-    {loading ? <View style={styles.loading}><ActivityIndicator color={C.blue} /><Text style={styles.muted}>Открываем календарь…</Text></View> : tab === 'tasks' ? <>
+    {loading ? <View style={styles.loading}><ActivityIndicator color={C.blue} /><Text style={styles.muted}>Открываем календарь…</Text></View> : tab === 'tasks' ? <View style={styles.screenBody}>
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
         <View style={styles.sectionTop}><Text style={styles.sectionHeading}>Мои категории</Text><Action label="+ Категория" onPress={() => openCategory()} /></View>
         {data.categories.map(category => {
@@ -201,7 +201,7 @@ export default function App() {
         <Text style={styles.footerNote}>Задачи существуют отдельно от записей календаря.</Text>
       </ScrollView>
       <Pressable onPress={() => openTask()} accessibilityRole="button" accessibilityLabel="Добавить задачу" style={styles.fab}><Text style={styles.fabText}>+</Text></Pressable>
-    </> : <>
+    </View> : <>
       <View style={styles.calendarControls}>
         {mode !== 'three' && <View style={styles.dateNavigator}><Pressable accessibilityLabel="Предыдущая дата" onPress={() => move(-1)} style={styles.navArrow}><Text style={styles.navArrowText}>←</Text></Pressable><Text style={styles.dateHeading}>{mode === 'month' ? monthTitle(selected) : dateTitle(selected)}</Text><Pressable accessibilityLabel="Следующая дата" onPress={() => move(1)} style={styles.navArrow}><Text style={styles.navArrowText}>→</Text></Pressable></View>}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeRow}>{([['day', 'День'], ['three', '3 дня'], ['week', 'Неделя'], ['month', 'Месяц']] as const).map(([value, label]) => <Chip key={value} label={label} selected={mode === value} onPress={() => setMode(value)} />)}</ScrollView>
@@ -218,8 +218,8 @@ export default function App() {
     </>}
     <View style={styles.tabBar}><Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'tasks' }} onPress={() => setTab('tasks')} style={[styles.tab, tab === 'tasks' && styles.activeTab]}><Text style={[styles.tabIcon, tab === 'tasks' && styles.activeTabText]}>☑</Text><Text style={[styles.tabText, tab === 'tasks' && styles.activeTabText]}>Задачи</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'calendar' }} onPress={() => setTab('calendar')} style={[styles.tab, tab === 'calendar' && styles.activeTab]}><Text style={[styles.tabIcon, tab === 'calendar' && styles.activeTabText]}>▦</Text><Text style={[styles.tabText, tab === 'calendar' && styles.activeTabText]}>Календарь</Text></Pressable></View>
 
-    <Modal visible={dialog !== null} transparent animationType="slide" onRequestClose={() => setDialog(null)}><View style={styles.modalBackdrop}><View style={styles.sheet}><View style={styles.sheetTop}><Text style={styles.sheetTitle}>{dialog === 'task' ? taskDraft?.title ? 'Задача' : 'Новая задача' : dialog === 'category' ? categoryDraft?.name ? 'Категория' : 'Новая категория' : dialog === 'event' ? eventDraft?.title ? 'Запись' : 'Новая запись' : dialog === 'types' ? 'Типы записей' : 'Тип записи'}</Text><Pressable accessibilityLabel="Закрыть" onPress={() => setDialog(null)} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable></View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
+    <Modal visible={dialog !== null} transparent animationType="slide" onRequestClose={() => setDialog(null)}><KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}><View style={styles.sheet}><View style={styles.sheetTop}><Text style={styles.sheetTitle}>{dialog === 'task' ? taskDraft?.title ? 'Задача' : 'Новая задача' : dialog === 'category' ? categoryDraft?.name ? 'Категория' : 'Новая категория' : dialog === 'event' ? eventDraft?.title ? 'Запись' : 'Новая запись' : dialog === 'types' ? 'Типы записей' : 'Тип записи'}</Text><Pressable accessibilityLabel="Закрыть" onPress={() => setDialog(null)} style={styles.close}><Text style={styles.closeText}>×</Text></Pressable></View>
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} contentContainerStyle={styles.sheetContent}>
         {dialog === 'task' && taskDraft && <><Text style={styles.fieldLabel}>Название</Text><TextInput value={taskDraft.title} onChangeText={title => setTaskDraft({ ...taskDraft, title })} placeholder="Что нужно сделать?" style={styles.input} autoFocus /><Text style={styles.fieldLabel}>Категория</Text><View style={styles.wrap}>{data.categories.map(x => <Chip key={x.id} label={x.name} selected={taskDraft.categoryId === x.id} onPress={() => setTaskDraft({ ...taskDraft, categoryId: x.id })} />)}</View><Action label="Сохранить задачу" kind="primary" onPress={saveTask} />{data.tasks.some(x => x.id === taskDraft.id) && <Action label="Удалить задачу" kind="danger" onPress={() => mutate(() => repository.deleteTask(taskDraft.id), () => setDialog(null))} />}</>}
         {dialog === 'category' && categoryDraft && <><Text style={styles.fieldLabel}>Название категории</Text><TextInput value={categoryDraft.name} onChangeText={name => setCategoryDraft({ ...categoryDraft, name })} placeholder="Например, Учёба" style={styles.input} autoFocus /><Action label="Сохранить категорию" kind="primary" onPress={saveCategory} />{data.categories.some(x => x.id === categoryDraft.id) && <><Text style={styles.helpText}>При удалении задачи перейдут в «Без категории».</Text><Action label="Удалить категорию" kind="danger" onPress={() => mutate(() => repository.deleteCategory(categoryDraft.id), () => setDialog(null))} /></>}</>}
         {dialog === 'event' && eventDraft && <>
@@ -241,7 +241,7 @@ export default function App() {
         {dialog === 'type' && typeDraft && <><Text style={styles.fieldLabel}>Название типа</Text><TextInput value={typeDraft.name} onChangeText={name => setTypeDraft({ ...typeDraft, name })} style={styles.input} placeholder="Например, Спорт" autoFocus /><Text style={styles.fieldLabel}>Цвет</Text><View style={styles.wrap}>{TYPE_COLORS.map(color => <Pressable key={color} accessibilityLabel={`Цвет ${color}`} onPress={() => setTypeDraft({ ...typeDraft, color })} style={[styles.colorChoice, { backgroundColor: color }, typeDraft.color === color && styles.colorSelected]} />)}</View><Action label="Сохранить тип" kind="primary" onPress={saveType} />{data.types.some(x => x.id === typeDraft.id) && !typeDraft.system && <><Text style={styles.helpText}>При удалении записи перейдут в «Другое».</Text><Action label="Удалить тип" kind="danger" onPress={() => mutate(() => repository.deleteType(typeDraft.id), () => setDialog('types'))} /></>}</>}
         {!!formError && <Text style={styles.error}>{formError}</Text>}
       </ScrollView>
-    </View></View></Modal>
+    </View></KeyboardAvoidingView></Modal>
   </SafeAreaView></SafeAreaProvider>;
 }
 
@@ -260,6 +260,7 @@ const layoutStyles = StyleSheet.create({
 const styles = {
   ...layoutStyles,
   ...StyleSheet.create({
+    screenBody: { flex: 1 },
     demoBanner: { backgroundColor: '#302536', color: '#e4bad5', paddingHorizontal: 18, paddingVertical: 7, fontSize: 11 },
     actionPrimary: { backgroundColor: C.button, marginTop: 12, alignSelf: 'stretch', alignItems: 'center' },
     actionOrange: { backgroundColor: C.orange, marginTop: 12, alignSelf: 'stretch', alignItems: 'center' },
@@ -268,7 +269,7 @@ const styles = {
     check: { width: 24, height: 24, borderRadius: 9, borderWidth: 2, borderColor: '#8f899d', alignItems: 'center', justifyContent: 'center' },
     checkDone: { backgroundColor: C.button, borderColor: C.button },
     taskDone: { textDecorationLine: 'line-through', color: '#898494' },
-    fab: { position: 'absolute', right: 22, bottom: 83, width: 55, height: 55, borderRadius: 20, backgroundColor: C.button, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10 },
+    fab: { position: 'absolute', right: 22, bottom: 16, width: 55, height: 55, borderRadius: 20, backgroundColor: C.button, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10 },
     chipSelected: { backgroundColor: C.pale, borderColor: C.purple },
     navArrowText: { fontSize: 21, lineHeight: 26, color: C.blue, textAlign: 'center', includeFontPadding: false },
     timelineScroll: { flex: 1, backgroundColor: C.bg },
